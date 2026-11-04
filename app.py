@@ -14,7 +14,7 @@ plt.rcParams['axes.unicode_minus'] = False
 
 # Streamlit 페이지 설정
 st.set_page_config(
-    page_title="7팀 복합 배관계 및 펌프 통합 해석 프로그램",
+    page_title="5조 복합 배관계 및 펌프 통합 해석 프로그램",
     page_icon="⚙️",
     layout="wide"
 )
