@@ -19,7 +19,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("⚙️ 7팀 복합 배관계 해석 및 펌프/최적화 통합 프로그램")
+st.title("⚙️ 5조 복합 배관계 해석 및 펌프/최적화 통합 프로그램")
 st.markdown("Darcy-Weisbach 방정식과 Colebrook-White 공식을 활용한 배관 시스템 해석, 펌프 효율 분석 및 최적화 툴입니다.")
 st.markdown("---")
 
