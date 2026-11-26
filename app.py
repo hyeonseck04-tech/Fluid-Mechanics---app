@@ -426,88 +426,197 @@ st.pyplot(fig)
 plt.close(fig)
 
 # ==========================================
-# 6. 최적 배관 계통 모식도 (Schematic)
+# 6. 실제 배관 계통도 (P&ID 스타일 입상/직각 배관 구조)
 # ==========================================
-def plot_piping_schematic(current_d, opt_d, is_replacement, dz, l_m, n_el, n_val, add_hp, p1, p2):
-    fig, ax = plt.subplots(figsize=(13, 4.2))
+def draw_valve_symbol(ax, x, y, horizontal=True, label=None):
+    """P&ID 표준 게이트/글로브 밸브 심볼 (모래시계 + 핸들)"""
+    s = 0.22
+    if horizontal:
+        tri1 = plt.Polygon([[x - s, y - s * 0.7], [x - s, y + s * 0.7], [x, y]], closed=True, facecolor="#f59e0b", edgecolor="#1e293b", lw=1.3, zorder=6)
+        tri2 = plt.Polygon([[x + s, y - s * 0.7], [x + s, y + s * 0.7], [x, y]], closed=True, facecolor="#f59e0b", edgecolor="#1e293b", lw=1.3, zorder=6)
+        ax.add_patch(tri1)
+        ax.add_patch(tri2)
+        ax.plot([x, x], [y, y + s * 1.3], color="#1e293b", lw=1.5, zorder=6)
+        ax.plot([x - s * 0.7, x + s * 0.7], [y + s * 1.3, y + s * 1.3], color="#1e293b", lw=1.8, zorder=6)
+        if label:
+            ax.text(x, y - s * 1.25, label, ha="center", va="top", fontsize=8, fontweight="bold", color="#b45309")
+    else:
+        tri1 = plt.Polygon([[x - s * 0.7, y - s], [x + s * 0.7, y - s], [x, y]], closed=True, facecolor="#f59e0b", edgecolor="#1e293b", lw=1.3, zorder=6)
+        tri2 = plt.Polygon([[x - s * 0.7, y + s], [x + s * 0.7, y + s], [x, y]], closed=True, facecolor="#f59e0b", edgecolor="#1e293b", lw=1.3, zorder=6)
+        ax.add_patch(tri1)
+        ax.add_patch(tri2)
+        ax.plot([x, x + s * 1.3], [y, y], color="#1e293b", lw=1.5, zorder=6)
+        ax.plot([x + s * 1.3, x + s * 1.3], [y - s * 0.7, y + s * 0.7], color="#1e293b", lw=1.8, zorder=6)
+        if label:
+            ax.text(x - s * 1.2, y, label, ha="right", va="center", fontsize=8, fontweight="bold", color="#b45309")
 
-    # 좌표 설정 (좌 -> 우 흐름)
-    x_inlet = 1.0
-    x_pump = 2.5
-    x_pipe_start = 4.0
-    x_pipe_end = 9.0
-    x_outlet = 10.2
 
-    y1 = 2.0
-    y2 = 2.0 + np.clip(dz * 0.25, -1.2, 1.5)  # 시각적 고도차 반영
+def draw_centrifugal_pump(ax, cx, cy, active=True, add_hp=0.0):
+    """P&ID 표준 원심펌프 심볼 (원형 케이싱 + 받침대 + 접선 토출 노즐)"""
+    r = 0.42
+    color = "#dc2626" if active else "#64748b"
+    fill = "#fef2f2" if active else "#f8fafc"
+
+    # 받침대 (Baseplate)
+    base = plt.Polygon([[cx - r * 0.85, cy - r * 1.35], [cx + r * 0.85, cy - r * 1.35],
+                        [cx + r * 0.55, cy - r * 0.75], [cx - r * 0.55, cy - r * 0.75]],
+                       closed=True, facecolor=color, edgecolor="#1e293b", lw=1.2, zorder=4)
+    ax.add_patch(base)
+
+    # 펌프 케이싱 원
+    circle = plt.Circle((cx, cy), r, facecolor=fill, edgecolor=color, lw=2.5, zorder=5)
+    ax.add_patch(circle)
+
+    # 접선 토출 노즐 (오른쪽 상단)
+    ax.plot([cx, cx + r * 1.35], [cy + r, cy + r], color=color, lw=3.2, zorder=4)
+
+    # 임펠러 회전 방향 화살표/표기
+    ax.text(cx, cy, "P-101", ha="center", va="center", fontsize=8.5, fontweight="bold", color=color, zorder=6)
+    status = f"PUMP ON (+{add_hp:.2f} m)" if active else "BYPASS / NO EXTRA PUMP"
+    ax.text(cx, cy - r * 1.55, status, ha="center", va="top", fontsize=8.5, fontweight="bold", color=color)
+
+
+def draw_tank(ax, x, y, width=1.1, height=1.5, title="TANK", info=""):
+    """공정 탱크(저장조) 및 수면 심볼"""
+    rect = plt.Rectangle((x - width / 2, y - height / 2), width, height,
+                         facecolor="#f1f5f9", edgecolor="#334155", lw=2, zorder=3)
+    ax.add_patch(rect)
+    # 내부 유체 영역
+    fluid_h = height * 0.65
+    fluid = plt.Rectangle((x - width / 2 + 0.03, y - height / 2 + 0.03), width - 0.06, fluid_h,
+                          facecolor="#bae6fd", edgecolor="none", zorder=2)
+    ax.add_patch(fluid)
+    # 수면 파형 선
+    wx = np.linspace(x - width / 2 + 0.05, x + width / 2 - 0.05, 30)
+    wy = (y - height / 2 + fluid_h) + 0.04 * np.sin(np.linspace(0, 3 * np.pi, 30))
+    ax.plot(wx, wy, color="#0284c7", lw=1.5, zorder=4)
+
+    ax.text(x, y + height / 2 + 0.15, title, ha="center", va="bottom", fontsize=9.5, fontweight="bold", color="#0f172a")
+    if info:
+        ax.text(x, y - height / 2 - 0.18, info, ha="center", va="top", fontsize=8.5, color="#334155")
+
+
+def plot_real_piping_diagram(current_d, opt_d, is_replacement, dz, l_m, n_el, n_val, add_hp, p1, p2, q_m3h):
+    fig, ax = plt.subplots(figsize=(14, 5.6))
 
     display_d = opt_d if (is_replacement and opt_d is not None) else current_d
-    line_lw = np.clip(display_d / 12.0, 2.0, 8.0)
+    pipe_lw = np.clip(display_d / 10.0, 2.8, 8.5)
+    pipe_color = "#0284c7" if is_replacement else "#1e293b"
+    pump_active = bool(np.isfinite(add_hp) and add_hp > 1e-6)
 
-    # 입구 -> 펌프 -> 배관 시작 연결선
-    ax.plot([x_inlet, x_pump], [y1, y1], color="#334155", lw=3)
-    ax.plot([x_pump, x_pipe_start], [y1, y1], color="#334155", lw=3)
+    y_base = 1.8
+    # 고도차 반영 (최소 시각 단차 확보)
+    visual_dz = np.clip(dz * 0.35, -1.0, 2.2)
+    if abs(dz) > 0 and abs(visual_dz) < 0.7:
+        visual_dz = 0.7 if dz > 0 else -0.7
+    y_top = y_base + visual_dz
 
-    # 펌프 심볼 (추가 펌프 수두가 0보다 클 때 강조)
-    pump_color = "#dc2626" if (np.isfinite(add_hp) and add_hp > 1e-6) else "#64748b"
-    pump_circle = plt.Circle((x_pump, y1), 0.35, facecolor="white", edgecolor=pump_color, lw=2.5, zorder=4)
-    ax.add_patch(pump_circle)
-    ax.text(x_pump, y1, "P", ha="center", va="center", fontsize=11, fontweight="bold", color=pump_color, zorder=5)
-    pump_label = f"Pump (+{add_hp:.2f} m)" if (np.isfinite(add_hp) and add_hp > 1e-6) else "No Extra Pump"
-    ax.text(x_pump, y1 - 0.65, pump_label, ha="center", va="top", fontsize=9, color=pump_color)
+    # 1. 입구 탱크 & 흡입 배관 & 펌프
+    draw_tank(ax, 1.0, y_base + 0.25, title="SUCTION TANK", info=f"P1 = {p1:.1f} kPa,g\nz1 = 0.0 m")
+    ax.plot([1.55, 2.7], [y_base, y_base], color="#334155", lw=pipe_lw, zorder=3)
+    draw_centrifugal_pump(ax, 3.1, y_base, active=pump_active, add_hp=add_hp)
 
-    # 메인 배관 (고도차 반영)
-    pipe_color = "#0284c7" if is_replacement else "#0f172a"
-    ax.plot([x_pipe_start, x_pipe_end], [y1, y2], color=pipe_color, lw=line_lw, solid_capstyle="round", zorder=3)
+    # 펌프 토출 노즐 높이에서 시작
+    y_disch = y_base + 0.42
+    x_start = 3.65
+    x_end = 10.6
 
-    # 밸브 마커 (배관 35% 지점)
+    # 2. 엘보 개수(n_el)에 따른 실제 90도 직각 배관 경로 생성
+    pts = [(x_start, y_disch)]
+    if n_el <= 0:
+        # 엘보 0개: 수평 직관 연결 (고도차 없을 때 완전 직선)
+        pts.append((x_end, y_top))
+    elif n_el == 1:
+        # 90도 엘보 1개: 수평 이동 후 수직 상승/하강
+        pts.append((x_end, y_disch))
+        pts.append((x_end, y_top))
+    elif n_el == 2:
+        # 90도 엘보 2개: 수평 -> 수직 입상(Riser) -> 상부 수평관
+        x_mid = 6.6
+        pts.append((x_mid, y_disch))
+        pts.append((x_mid, y_top))
+        pts.append((x_end, y_top))
+    else:
+        # 90도 엘보 3개 이상: 입력된 엘보 개수만큼 계단식 직각 꺾임 배치
+        n_steps = n_el // 2
+        xs = np.linspace(x_start + 1.0, x_end - 1.0, n_steps + 1)
+        ys = np.linspace(y_disch, y_top, n_steps + 1)
+        for i in range(n_steps):
+            pts.append((xs[i], ys[i]))
+            pts.append((xs[i], ys[i + 1]))
+        if n_el % 2 == 1:
+            pts.append((x_end, ys[-1]))
+            pts.append((x_end, y_top + 0.4))
+        else:
+            pts.append((x_end, y_top))
+
+    # 배관 외벽(진한 색) + 내부 유체 흐름선(밝은 색) 이중선으로 실제 파이프 표현
+    px = [p[0] for p in pts]
+    py = [p[1] for p in pts]
+    ax.plot(px, py, color="#0f172a", lw=pipe_lw + 2.2, solid_joinstyle="miter", zorder=3)
+    ax.plot(px, py, color=pipe_color, lw=pipe_lw, solid_joinstyle="miter", zorder=4)
+
+    # 90도 엘보 위치마다 플랜지/피팅 마커 및 번호 표시
+    elbow_coords = pts[1:-1]
+    for idx, (ex, ey) in enumerate(elbow_coords, start=1):
+        ax.scatter([ex], [ey], s=55, color="#10b981", edgecolor="#0f172a", zorder=6)
+        offset_y = 0.22 if idx % 2 == 1 else -0.28
+        ax.text(ex, ey + offset_y, f"EL-{idx}", ha="center", va="center", fontsize=7.5, fontweight="bold", color="#047857")
+
+    # 3. 밸브 개수(n_val)만큼 실제 배관 구간 위에 밸브 심볼 배치
     if n_val > 0:
-        t_val = 0.35
-        vx = x_pipe_start + t_val * (x_pipe_end - x_pipe_start)
-        vy = y1 + t_val * (y2 - y1)
-        ax.scatter([vx], [vy], marker="D", s=90, color="#f59e0b", edgecolor="black", zorder=5)
-        ax.text(vx, vy + 0.35, f"Valve x{n_val}", ha="center", va="bottom", fontsize=9, fontweight="bold", color="#b45309")
+        # 가장 긴 수평 구간들을 찾아 밸브 균등 배치
+        horiz_segs = []
+        for i in range(len(pts) - 1):
+            x1, y1_s = pts[i]
+            x2, y2_s = pts[i + 1]
+            if abs(y1_s - y2_s) < 1e-6 and abs(x2 - x1) > 0.6:
+                horiz_segs.append((x1, x2, y1_s))
 
-    # 엘보 마커 (배관 70% 지점)
-    if n_el > 0:
-        t_el = 0.70
-        ex = x_pipe_start + t_el * (x_pipe_end - x_pipe_start)
-        ey = y1 + t_el * (y2 - y1)
-        ax.scatter([ex], [ey], marker="s", s=85, color="#10b981", edgecolor="black", zorder=5)
-        ax.text(ex, ey + 0.35, f"90° Elbow x{n_el}", ha="center", va="bottom", fontsize=9, fontweight="bold", color="#047857")
+        if horiz_segs:
+            for v_idx in range(n_val):
+                seg = horiz_segs[v_idx % len(horiz_segs)]
+                frac = (v_idx // len(horiz_segs) + 1) / (n_val // len(horiz_segs) + 2)
+                vx = seg[0] + frac * (seg[1] - seg[0])
+                vy = seg[2]
+                draw_valve_symbol(ax, vx, vy, horizontal=True, label=f"V-{v_idx + 1}")
 
-    # 출구 연결
-    ax.plot([x_pipe_end, x_outlet], [y2, y2], color="#334155", lw=3)
-    ax.annotate("", xy=(x_outlet + 0.5, y2), xytext=(x_outlet, y2),
-                arrowprops=dict(arrowstyle="->", lw=2.5, color="#0f172a"))
+    # 4. 출구 탱크 연결 및 유량 화살표
+    last_x, last_y = pts[-1]
+    ax.plot([last_x, 11.45], [last_y, last_y], color="#0f172a", lw=pipe_lw + 2.2, zorder=3)
+    ax.plot([last_x, 11.45], [last_y, last_y], color=pipe_color, lw=pipe_lw, zorder=4)
+    draw_tank(ax, 12.0, last_y + 0.25, title="DISCHARGE TANK", info=f"Target P2 = {p2:.1f} kPa,g\nz2 = {dz:+.1f} m")
 
-    # 기준선 및 정보 주석
-    ax.axhline(y1, color="#94a3b8", linestyle=":", lw=1)
-    ax.text(x_inlet, y1 + 0.45, f"Inlet\nP1={p1:.1f} kPa,g", ha="center", va="bottom", fontsize=9)
-    ax.text(x_outlet + 0.55, y2, f"Outlet\nTarget P2={p2:.1f} kPa,g", ha="left", va="center", fontsize=9)
+    # 유량 방향 화살표 (흡입관 & 토출관)
+    ax.annotate("", xy=(2.45, y_base + 0.25), xytext=(1.75, y_base + 0.25),
+                arrowprops=dict(arrowstyle="->", lw=1.8, color="#0284c7"))
+    ax.text(2.1, y_base + 0.35, f"Q={q_m3h:.2f} m³/h", ha="center", va="bottom", fontsize=8, color="#0284c7", fontweight="bold")
 
-    mid_x = 0.5 * (x_pipe_start + x_pipe_end)
-    mid_y = 0.5 * (y1 + y2)
-    d_text = f"Optimum ID: {display_d:.2f} mm (Old: {current_d:.2f} mm)" if is_replacement else f"Pipe ID: {display_d:.2f} mm"
-    ax.text(
-        mid_x, min(y1, y2) - 0.55,
-        f"{d_text} | L={l_m:.1f} m | Δz={dz:+.1f} m",
-        ha="center", va="top", fontsize=9.5, fontweight="bold", color=pipe_color
-    )
+    # 치수선 (고도차 Δz 및 총 직관길이 L)
+    ax.plot([10.9, 10.9], [y_base, last_y], color="#64748b", linestyle="--", lw=1.2)
+    ax.annotate("", xy=(10.9, last_y), xytext=(10.9, y_base),
+                arrowprops=dict(arrowstyle="<->", lw=1.2, color="#475569"))
+    ax.text(11.0, (y_base + last_y) / 2, f"Δz = {dz:+.2f} m", ha="left", va="center", fontsize=8.5, fontweight="bold", color="#334155")
 
-    ax.set_title("5조 최적 배관 계통 모식도 (Schematic)", fontsize=12, fontweight="bold", pad=12)
-    ax.set_xlim(0.2, 11.8)
-    ax.set_ylim(min(0.3, min(y1, y2) - 1.2), max(3.6, max(y1, y2) + 1.1))
+    # 하단 배관 사양 박스
+    spec_title = f"OPTIMUM PIPE ID: {display_d:.2f} mm (Existing: {current_d:.2f} mm)" if is_replacement else f"PIPE ID: {display_d:.2f} mm (Existing Kept)"
+    spec_detail = f"Total Straight Length L = {l_m:.1f} m  |  90° Elbows: {n_el} ea  |  Valves: {n_val} ea"
+    ax.text(6.5, 0.45, f"{spec_title}\n{spec_detail}",
+            ha="center", va="center", fontsize=9.5, fontweight="bold", color="#0f172a",
+            bbox=dict(boxstyle="round,pad=0.5", facecolor="#f8fafc", edgecolor=pipe_color, lw=1.8))
+
+    ax.set_xlim(0.1, 13.0)
+    ax.set_ylim(-0.2, max(4.8, last_y + 1.5))
     ax.axis("off")
     plt.tight_layout()
     return fig
 
 
-st.subheader("[최적 배관 계통 모식도]")
+st.subheader("[최적 배관 계통도 (실제 배관 배치 구조)]")
 opt_d_val = float(selected["D_mm"]) if selected is not None else None
 add_hp_val = float(selected["Additional_Hp_m"]) if selected is not None else float(current["Additional_Hp_m"])
 
-fig_sch = plot_piping_schematic(
+fig_sch = plot_real_piping_diagram(
     current_d=current_d_mm,
     opt_d=opt_d_val,
     is_replacement=replacement,
@@ -517,7 +626,8 @@ fig_sch = plot_piping_schematic(
     n_val=valve_val,
     add_hp=add_hp_val,
     p1=p1_val,
-    p2=p2_val
+    p2=p2_val,
+    q_m3h=q_val
 )
 st.pyplot(fig_sch)
 plt.close(fig_sch)
