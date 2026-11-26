@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import ipywidgets as widgets
 from IPython.display import display, clear_output
 
 plt.rcParams["axes.unicode_minus"] = False
