@@ -1,12 +1,43 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import streamlit as st
+import ipywidgets as widgets
+from IPython.display import display, clear_output
 
 plt.rcParams["axes.unicode_minus"] = False
-G = 9.81
 
-st.set_page_config(page_title="5조 복합 배관계 해석 프로그램", layout="wide")
+G = 9.81
+STYLE = {"description_width": "initial"}
+
+# ==========================================
+# 0. 사용자가 원하는 기본 초기값 설정 구역
+# ==========================================
+DEFAULTS = {
+    "q_m3h": 5.0,
+    "p1_kpa": 150.0,
+    "p2_kpa": 0.0,
+    "dz_m": 2.0,
+    "rho": 1000.0,
+    "mu": 0.001,
+    "length_m": 30.0,
+    "od_mm": 33.4,
+    "t_mm": 3.38,
+    "eps_mm": 0.045,
+    "n_el": 2,
+    "k_el": 0.75,
+    "n_val": 1,
+    "k_val": 5.0,
+    "mode": "배관 교체 허용",
+    "dmin_mm": 20.0,
+    "dmax_mm": 80.0,
+    "custom_d_mm": 40.0,
+    "vmax_ms": 3.0,
+    "hpmax_m": 20.0,
+    "new_n_el": 2,
+    "new_k_el": 0.75,
+    "new_n_val": 1,
+    "new_k_val": 5.0,
+}
 
 
 # ==========================================
@@ -129,301 +160,815 @@ def calculate_system(
 
 
 # ==========================================
-# 3. 사이드바 입력 위젯 (Streamlit)
+# 3. 입력 위젯 생성
 # ==========================================
-st.title("5조 복합 배관계 해석 프로그램")
-st.caption(
-    "압력 기준: 게이지압 | 입구·출구: 동일 내경의 관 단면 | "
-    "마찰계수: Darcy 기준 | 전이영역: 2000 ≤ Re ≤ 4000 (손실계산 및 선정 제외)"
+def float_input(value, description):
+    return widgets.FloatText(
+        value=value,
+        description=description,
+        style=STYLE
+    )
+
+
+def int_input(value, description):
+    return widgets.IntText(
+        value=value,
+        description=description,
+        style=STYLE
+    )
+
+
+q_input = float_input(DEFAULTS["q_m3h"], "목표유량(m³/h):")
+p1_input = float_input(DEFAULTS["p1_kpa"], "공급압력(kPa,g):")
+p2_input = float_input(DEFAULTS["p2_kpa"], "목표 출구압력(kPa,g):")
+dz_input = float_input(DEFAULTS["dz_m"], "고도차(z2-z1,m):")
+
+rho_input = float_input(DEFAULTS["rho"], "밀도(kg/m³):")
+mu_input = float_input(DEFAULTS["mu"], "점도(Pa·s):")
+
+length_input = float_input(DEFAULTS["length_m"], "직관 총길이(m):")
+od_input = float_input(DEFAULTS["od_mm"], "기존 외경 OD(mm):")
+t_input = float_input(DEFAULTS["t_mm"], "기존 벽두께 t(mm):")
+eps_input = float_input(DEFAULTS["eps_mm"], "배관조도(mm):")
+
+elbow_input = int_input(DEFAULTS["n_el"], "기존 90° 엘보 개수:")
+kel_input = float_input(DEFAULTS["k_el"], "기존 엘보 K값:")
+valve_input = int_input(DEFAULTS["n_val"], "기존 밸브 개수:")
+kval_input = float_input(DEFAULTS["k_val"], "기존 밸브 K값:")
+
+mode_input = widgets.Dropdown(
+    options=["배관 교체 허용", "기존 배관 유지"],
+    value=DEFAULTS["mode"],
+    description="설계 조건:",
+    style=STYLE
 )
 
-with st.sidebar:
-    st.header("입력 조건")
-    c1, c2 = st.columns(2)
-    with c1:
-        q_val = st.number_input("목표유량(m³/h)", value=5.0, step=0.5)
-        p2_val = st.number_input("목표 출구압력(kPa,g)", value=0.0, step=5.0)
-        rho_val = st.number_input("밀도(kg/m³)", value=1000.0, step=10.0)
-        length_val = st.number_input("직관 총길이(m)", value=30.0, step=1.0)
-        od_val = st.number_input("기존 외경 OD(mm)", value=33.4, step=0.1)
-        elbow_val = int(st.number_input("90° 엘보 개수", value=2, step=1))
-        valve_val = int(st.number_input("밸브 개수", value=1, step=1))
-    with c2:
-        p1_val = st.number_input("공급압력(kPa,g)", value=150.0, step=5.0)
-        dz_val = st.number_input("고도차(z2-z1,m)", value=2.0, step=0.5)
-        mu_val = st.number_input("점도(Pa·s)", value=0.001, format="%.6f")
-        eps_val = st.number_input("배관조도(mm)", value=0.045, format="%.4f")
-        t_val = st.number_input("기존 벽두께 t(mm)", value=3.38, step=0.05)
-        kel_val = st.number_input("엘보 K값", value=0.75, step=0.05)
-        kval_val = st.number_input("밸브 K값", value=5.0, step=0.5)
+dmin_input = float_input(DEFAULTS["dmin_mm"], "탐색 최소 내경(mm):")
+dmax_input = float_input(DEFAULTS["dmax_mm"], "탐색 최대 내경(mm):")
+custom_d_input = float_input(DEFAULTS["custom_d_mm"], "비교 내경(mm):")
+vmax_input = float_input(DEFAULTS["vmax_ms"], "허용 최대유속(m/s):")
+hpmax_input = float_input(DEFAULTS["hpmax_m"], "추가 펌프수두 한도(m):")
 
-    st.divider()
-    st.subheader("관경 탐색 및 제한조건")
-    mode_val = st.selectbox("설계 조건", ["기존 배관 유지", "배관 교체 허용"])
-    replacement = mode_val == "배관 교체 허용"
+new_elbow_input = int_input(DEFAULTS["new_n_el"], "개선안 엘보 개수:")
+new_kel_input = float_input(DEFAULTS["new_k_el"], "개선안 엘보 K값:")
+new_valve_input = int_input(DEFAULTS["new_n_val"], "개선안 밸브 개수:")
+new_kval_input = float_input(DEFAULTS["new_k_val"], "개선안 밸브 K값:")
 
-    c3, c4 = st.columns(2)
-    with c3:
-        dmin_val = st.number_input(
-            "탐색 최소 내경(mm)", value=20.0, step=1.0, disabled=not replacement
-        )
-        vmax_val = st.number_input("허용 최대유속(m/s)", value=3.0, step=0.1)
-    with c4:
-        dmax_val = st.number_input(
-            "탐색 최대 내경(mm)", value=80.0, step=1.0, disabled=not replacement
-        )
-        hpmax_val = st.number_input("추가 펌프수두 한도(m)", value=20.0, step=1.0)
+reset_button = widgets.Button(
+    description="기본값으로 되돌리기",
+    button_style="warning"
+)
 
-
-# ==========================================
-# 4. 입력 검증 및 계산
-# ==========================================
-numeric_vals = [
-    q_val, p1_val, p2_val, dz_val, rho_val, mu_val,
-    length_val, od_val, t_val, eps_val, elbow_val, kel_val,
-    valve_val, kval_val, dmin_val, dmax_val, vmax_val, hpmax_val
+all_inputs = [
+    q_input, p1_input, p2_input, dz_input,
+    rho_input, mu_input, length_input,
+    od_input, t_input, eps_input,
+    elbow_input, kel_input, valve_input, kval_input,
+    mode_input, dmin_input, dmax_input, custom_d_input,
+    vmax_input, hpmax_input,
+    new_elbow_input, new_kel_input,
+    new_valve_input, new_kval_input
 ]
 
-if not all(np.isfinite(v) for v in numeric_vals):
-    st.error("입력 오류: 유한하지 않은 숫자가 포함되어 있습니다.")
-    st.stop()
-
-current_d_mm = od_val - 2.0 * t_val
-
-if (
-    q_val <= 0 or rho_val <= 0 or mu_val <= 0
-    or od_val <= 0 or t_val < 0 or current_d_mm <= 0
-):
-    st.error("입력 오류: 유량·밀도·점도·외경·내경은 양수, 벽두께는 0 이상이어야 합니다.")
-    st.stop()
-
-if any(v < 0 for v in [length_val, eps_val, elbow_val, kel_val, valve_val, kval_val]):
-    st.error("입력 오류: 길이·조도·부속 개수·K값에는 음수를 입력할 수 없습니다.")
-    st.stop()
-
-if vmax_val <= 0 or hpmax_val < 0:
-    st.error("입력 오류: 최대유속은 양수, 추가 펌프수두 한도는 0 이상이어야 합니다.")
-    st.stop()
-
-if replacement and not (0 < dmin_val < dmax_val):
-    st.error("입력 오류: 탐색 범위는 0 < 최소 내경 < 최대 내경이어야 합니다.")
-    st.stop()
-
-
-def run_case(d_mm, q=None, length=None, kel=None, kval=None, method="sj"):
-    return calculate_system(
-        q_m3h=q_val if q is None else q,
-        p1_kpa=p1_val,
-        d_m=d_mm / 1000.0,
-        l_m=length_val if length is None else length,
-        eps_mm=eps_val,
-        rho=rho_val,
-        mu=mu_val,
-        z_diff=dz_val,
-        n_el=elbow_val,
-        k_el=kel_val if kel is None else kel,
-        n_val=valve_val,
-        k_val=kval_val if kval is None else kval,
-        p2_target_kpa=p2_val,
-        method=method
+ui = widgets.VBox([
+    widgets.HBox([
+        widgets.HTML("<h3>7팀 복합 배관계 해석 및 손실 저감 비교 프로그램</h3>"),
+    ]),
+    widgets.HTML(
+        "원하는 값을 직접 입력하면 표와 6분할 그래프가 즉시 갱신됩니다. | "
+        "압력 기준: 게이지압 | 마찰계수: Darcy 기준"
+    ),
+    reset_button,
+    widgets.HBox([q_input, p1_input]),
+    widgets.HBox([p2_input, dz_input]),
+    widgets.HBox([rho_input, mu_input]),
+    widgets.HBox([length_input, eps_input]),
+    widgets.HBox([od_input, t_input]),
+    widgets.HBox([elbow_input, kel_input]),
+    widgets.HBox([valve_input, kval_input]),
+    widgets.HTML("<h4>관경 탐색, 제한조건 및 Fitting 개선 비교</h4>"),
+    mode_input,
+    widgets.HBox([dmin_input, dmax_input]),
+    widgets.HBox([custom_d_input, vmax_input]),
+    widgets.HBox([hpmax_input]),
+    widgets.HBox([new_elbow_input, new_kel_input]),
+    widgets.HBox([new_valve_input, new_kval_input]),
+    widgets.HTML(
+        "비교 기준: 기존 배관 대비 '최소 적합 내경', "
+        "'저손실 대안(적합 후보 중 큰 내경)', '사용자 지정 비교 내경'의 "
+        "레이놀즈 수 및 총 손실수두 감소량·감소율(%) 확인<br>"
+        "탐색 방식: 연속 내경 후보 301개, 표준 규격 미적용<br>"
+        "전이영역: 2000 ≤ Re ≤ 4000, 손실계산 및 선정 제외"
     )
+])
+
+out = widgets.Output()
 
 
-current = run_case(current_d_mm)
+# ==========================================
+# 4. 계산 및 결과 출력
+# ==========================================
+def calc_reduction(base_loss, target_loss):
+    if (
+        np.isfinite(base_loss)
+        and base_loss > 0
+        and np.isfinite(target_loss)
+    ):
+        diff = base_loss - target_loss
+        pct = diff / base_loss * 100.0
+        return diff, pct
+    return np.nan, np.nan
 
-col_left, col_right = st.columns(2)
 
-with col_left:
-    st.subheader("[기존 배관 해석]")
-    st.write(f"- **관 내경:** {current_d_mm:.3f} mm")
-    st.write(f"- **평균 유속:** {current['Velocity']:.3f} m/s")
-    st.write(f"- **Reynolds 수:** {current['Reynolds']:,.0f}")
-    st.write(f"- **유동 상태:** {current['Regime']}")
+def update_results(change=None):
+    with out:
+        clear_output(wait=True)
 
-    if current["Transition"]:
-        st.warning("손실수두·압력 계산: 전이영역(2000 ≤ Re ≤ 4000)으로 제외")
-    else:
-        st.write(f"- **Darcy 마찰계수:** {current['Friction_Factor']:.6f}")
-        st.write(f"- **직관 손실수두:** {current['Major_Loss']:.3f} m")
-        st.write(f"- **엘보 손실수두:** {current['Elbow_Loss']:.3f} m")
-        st.write(f"- **밸브 손실수두:** {current['Valve_Loss']:.3f} m")
-        st.write(f"- **총 손실수두:** {current['Total_Loss']:.3f} m")
-        st.write(
-            f"- **주손실 / 부손실:** "
-            f"{current['Major_Ratio']:.1f}% / {current['Minor_Ratio']:.1f}%"
+        replacement = mode_input.value == "배관 교체 허용"
+
+        numeric_widgets = [
+            w for w in all_inputs if w is not mode_input
+        ]
+
+        if not all(np.isfinite(w.value) for w in numeric_widgets):
+            print("입력 오류: 유한하지 않은 숫자")
+            return
+
+        current_d_mm = od_input.value - 2.0 * t_input.value
+
+        if (
+            q_input.value <= 0
+            or rho_input.value <= 0
+            or mu_input.value <= 0
+            or od_input.value <= 0
+            or t_input.value < 0
+            or current_d_mm <= 0
+        ):
+            print(
+                "입력 오류: 유량·밀도·점도·외경·내경은 양수, "
+                "벽두께는 0 이상"
+            )
+            return
+
+        nonnegative = [
+            length_input, eps_input,
+            elbow_input, kel_input, valve_input, kval_input,
+            new_elbow_input, new_kel_input,
+            new_valve_input, new_kval_input
+        ]
+
+        if any(w.value < 0 for w in nonnegative):
+            print("입력 오류: 길이·조도·부속 개수·K값에 음수 포함")
+            return
+
+        if vmax_input.value <= 0 or hpmax_input.value < 0:
+            print(
+                "입력 오류: 최대유속은 양수, "
+                "추가 펌프수두 한도는 0 이상"
+            )
+            return
+
+        if not (0 < dmin_input.value < dmax_input.value):
+            print("입력 오류: 탐색 범위는 0 < 최소 내경 < 최대 내경")
+            return
+
+        def run(
+            d_mm, q=None, length=None,
+            n_el=None, kel=None, n_val=None, kval=None,
+            method="sj"
+        ):
+            return calculate_system(
+                q_m3h=q_input.value if q is None else q,
+                p1_kpa=p1_input.value,
+                d_m=d_mm / 1000.0,
+                l_m=length_input.value if length is None else length,
+                eps_mm=eps_input.value,
+                rho=rho_input.value,
+                mu=mu_input.value,
+                z_diff=dz_input.value,
+                n_el=elbow_input.value if n_el is None else n_el,
+                k_el=kel_input.value if kel is None else kel,
+                n_val=valve_input.value if n_val is None else n_val,
+                k_val=kval_input.value if kval is None else kval,
+                p2_target_kpa=p2_input.value,
+                method=method
+            )
+
+        current = run(current_d_mm)
+
+        custom_d_valid = custom_d_input.value > 0
+        custom_res = run(custom_d_input.value) if custom_d_valid else None
+
+        print("=" * 68)
+        print("[기존 배관 해석]")
+        print(f"관 내경: {current_d_mm:.3f} mm")
+        print(f"평균 유속: {current['Velocity']:.3f} m/s")
+        print(f"Reynolds 수: {current['Reynolds']:,.0f}")
+        print(f"유동 상태: {current['Regime']}")
+
+        if current["Transition"]:
+            print("손실수두·압력 계산: 전이영역으로 제외")
+        else:
+            print(f"Darcy 마찰계수: {current['Friction_Factor']:.6f}")
+            print(f"직관 손실수두: {current['Major_Loss']:.3f} m")
+            print(f"엘보 손실수두: {current['Elbow_Loss']:.3f} m")
+            print(f"밸브 손실수두: {current['Valve_Loss']:.3f} m")
+            print(f"총 손실수두: {current['Total_Loss']:.3f} m")
+            print(
+                f"주손실 / 부손실: "
+                f"{current['Major_Ratio']:.1f}% / "
+                f"{current['Minor_Ratio']:.1f}%"
+            )
+            print(
+                f"추가 펌프 없는 출구압력: "
+                f"{current['P2_kPa']:.3f} kPa,g"
+            )
+            print(
+                f"목표 출구압력 기준 필요 입구압력: "
+                f"{current['Required_P1_kPa']:.3f} kPa,g"
+            )
+            print(
+                f"추가 펌프 필요수두: "
+                f"{current['Additional_Hp_m']:.3f} m"
+            )
+
+        if custom_d_valid:
+            print("\n[사용자 지정 비교 내경 해석]")
+            if custom_res["Transition"] or not np.isfinite(custom_res["Total_Loss"]):
+                print(
+                    f"비교 내경: {custom_d_input.value:.3f} mm | "
+                    f"유속 {custom_res['Velocity']:.3f} m/s | "
+                    f"Re {custom_res['Reynolds']:,.0f} ({custom_res['Regime']}) | "
+                    "전이영역으로 손실 비교 제외"
+                )
+            else:
+                c_diff, c_pct = calc_reduction(
+                    current["Total_Loss"], custom_res["Total_Loss"]
+                )
+                diff_str = (
+                    f" | 기존 대비 {c_diff:+.3f} m ({c_pct:+.1f}%)"
+                    if np.isfinite(c_diff) else ""
+                )
+                print(
+                    f"비교 내경: {custom_d_input.value:.3f} mm | "
+                    f"유속 {custom_res['Velocity']:.3f} m/s | "
+                    f"Re {custom_res['Reynolds']:,.0f} ({custom_res['Regime']}) | "
+                    f"총 손실수두 {custom_res['Total_Loss']:.3f} m"
+                    f"{diff_str}"
+                )
+
+        # ------------------------------------------
+        # 관경 탐색 및 손실 저감 대안 비교
+        # ------------------------------------------
+        scan_diameters = np.linspace(
+            dmin_input.value, dmax_input.value, 301
         )
-        st.write(f"- **추가 펌프 없는 출구압력:** {current['P2_kPa']:.3f} kPa,g")
-        st.write(f"- **목표 출구압력 기준 필요 입구압력:** {current['Required_P1_kPa']:.3f} kPa,g")
-        st.write(f"- **추가 펌프 필요수두:** {current['Additional_Hp_m']:.3f} m")
+        scan_df = pd.DataFrame([
+            run(d) for d in scan_diameters
+        ])
+        scan_df["Feasible"] = (
+            (~scan_df["Transition"])
+            & np.isfinite(scan_df["Total_Loss"])
+            & (scan_df["Velocity"] <= vmax_input.value)
+            & (scan_df["Additional_Hp_m"] <= hpmax_input.value)
+        )
 
-diameters = (
-    np.linspace(dmin_val, dmax_val, 301)
-    if replacement else np.array([current_d_mm])
-)
+        feasible = scan_df[scan_df["Feasible"]]
+        min_feasible = feasible.iloc[0] if not feasible.empty else None
+        low_loss_alt = feasible.iloc[-1] if not feasible.empty else None
 
-candidates = pd.DataFrame([run_case(d) for d in diameters])
-candidates["Feasible"] = (
-    (~candidates["Transition"])
-    & np.isfinite(candidates["Total_Loss"])
-    & (candidates["Velocity"] <= vmax_val)
-    & (candidates["Additional_Hp_m"] <= hpmax_val)
-)
+        fitting_alt = run(
+            current_d_mm,
+            n_el=new_elbow_input.value,
+            kel=new_kel_input.value,
+            n_val=new_valve_input.value,
+            kval=new_kval_input.value
+        )
 
-feasible = candidates[candidates["Feasible"]]
-selected = None
+        spacing = (dmax_input.value - dmin_input.value) / 300.0
 
-with col_right:
-    st.subheader("[관경 선정]")
-    st.write(f"- **설계 조건:** {mode_val}")
-    st.write(f"- **허용 최대유속:** {vmax_val:.3f} m/s")
-    st.write(f"- **추가 펌프수두 한도:** {hpmax_val:.3f} m")
+        print("\n[관경 탐색 및 손실 저감 대안 비교]")
+        print(f"설계 조건: {mode_input.value}")
+        print(
+            f"탐색 내경: {dmin_input.value:.3f}"
+            f" ~ {dmax_input.value:.3f} mm "
+            f"(후보 {len(scan_df)}개, 간격 {spacing:.3f} mm)"
+        )
+        print(
+            f"제한조건: 유속 ≤ {vmax_input.value:.3f} m/s, "
+            f"추가 펌프수두 ≤ {hpmax_input.value:.3f} m"
+        )
 
-    if replacement:
-        spacing = (dmax_val - dmin_val) / 300.0
-        st.write(f"- **탐색 내경:** {dmin_val:.3f} ~ {dmax_val:.3f} mm (후보 {len(candidates)}개, 간격 {spacing:.3f} mm)")
-
-    if feasible.empty:
-        st.warning("선정 결과: 제한조건을 만족하는 후보 없음")
-    else:
-        selected = feasible.iloc[0]
-        if replacement:
-            st.success(f"최소 적합 탐색 내경: {selected['D_mm']:.3f} mm")
+        if feasible.empty:
+            print("선정 결과: 제한조건을 만족하는 탐색 후보 없음")
         else:
-            st.success("선정 결과: 기존 배관 제한조건 충족")
+            print(
+                "① 최소 적합 내경(조건 충족 최소 직경): "
+                f"{min_feasible['D_mm']:.3f} mm | "
+                f"유속 {min_feasible['Velocity']:.3f} m/s | "
+                f"Re {min_feasible['Reynolds']:,.0f} | "
+                f"총 손실수두 {min_feasible['Total_Loss']:.3f} m | "
+                f"추가 펌프수두 {min_feasible['Additional_Hp_m']:.3f} m"
+            )
+            print(
+                "② 저손실 대안(적합 후보 중 큰 내경): "
+                f"{low_loss_alt['D_mm']:.3f} mm | "
+                f"유속 {low_loss_alt['Velocity']:.3f} m/s | "
+                f"Re {low_loss_alt['Reynolds']:,.0f} | "
+                f"총 손실수두 {low_loss_alt['Total_Loss']:.3f} m | "
+                f"추가 펌프수두 {low_loss_alt['Additional_Hp_m']:.3f} m"
+            )
 
-        st.write(f"- **선정 유속:** {selected['Velocity']:.3f} m/s")
-        st.write(f"- **선정 총 손실수두:** {selected['Total_Loss']:.3f} m")
-        st.write(f"- **선정 추가 펌프 필요수두:** {selected['Additional_Hp_m']:.3f} m")
+            diff_min, pct_min = calc_reduction(
+                current["Total_Loss"], min_feasible["Total_Loss"]
+            )
+            diff_low, pct_low = calc_reduction(
+                current["Total_Loss"], low_loss_alt["Total_Loss"]
+            )
+            if np.isfinite(diff_low):
+                print(
+                    f"→ 기존 대비 총 손실수두 변화: "
+                    f"최소 적합 내경 {diff_min:+.3f} m ({pct_min:+.1f}%), "
+                    f"저손실 대안 {diff_low:+.3f} m ({pct_low:+.1f}%)"
+                )
 
-        if selected["Additional_Hp_m"] == 0:
-            st.caption("압력 조건: 기존 공급압력으로 목표 출구압력 이상 확보 가능 (목표유량 고정 기준)")
+        fitting_changed = (
+            new_elbow_input.value != elbow_input.value
+            or not np.isclose(new_kel_input.value, kel_input.value)
+            or new_valve_input.value != valve_input.value
+            or not np.isclose(new_kval_input.value, kval_input.value)
+        )
 
-st.subheader("[후보 계산표: 최대 5개]")
-columns = ["D_mm", "Velocity", "Reynolds", "Total_Loss", "Additional_Hp_m", "Feasible"]
-table = (feasible.head(5) if not feasible.empty else candidates.head(5))[columns].rename(columns={
-    "D_mm": "내경(mm)",
-    "Velocity": "유속(m/s)",
-    "Reynolds": "Re",
-    "Total_Loss": "총 손실수두(m)",
-    "Additional_Hp_m": "추가 펌프수두(m)",
-    "Feasible": "조건 충족"
-})
-st.dataframe(table.round(3), use_container_width=True)
+        if fitting_changed:
+            print(
+                "③ 기존 배관 + Fitting 변경안: "
+                f"엘보 {new_elbow_input.value}개(K={new_kel_input.value}), "
+                f"밸브 {new_valve_input.value}개(K={new_kval_input.value})"
+            )
+            if current["Transition"] or fitting_alt["Transition"]:
+                print("   전이영역 포함으로 손실 비교 제외")
+            else:
+                f_diff, f_pct = calc_reduction(
+                    current["Total_Loss"], fitting_alt["Total_Loss"]
+                )
+                print(
+                    f"   Re {fitting_alt['Reynolds']:,.0f} | "
+                    f"총 손실수두 {fitting_alt['Total_Loss']:.3f} m "
+                    f"(기존 대비 {f_diff:+.3f} m, {f_pct:+.1f}%)"
+                )
 
-check_d = float(selected["D_mm"]) if selected is not None else current_d_mm
-check = run_case(check_d)
+        # 대안 요약표 (손실 감소량 + 감소율 % 포함)
+        def make_summary_row(label, res, is_base=False):
+            if is_base:
+                diff, pct = 0.0, 0.0
+            else:
+                diff, pct = calc_reduction(
+                    current["Total_Loss"], res["Total_Loss"]
+                )
+            return {
+                "구분": label,
+                "내경(mm)": round(float(res["D_mm"]), 3),
+                "유속(m/s)": round(float(res["Velocity"]), 3),
+                "Re": round(float(res["Reynolds"]), 0),
+                "총 손실수두(m)": (
+                    round(float(res["Total_Loss"]), 3)
+                    if np.isfinite(res["Total_Loss"]) else np.nan
+                ),
+                "추가 펌프수두(m)": (
+                    round(float(res["Additional_Hp_m"]), 3)
+                    if np.isfinite(res["Additional_Hp_m"]) else np.nan
+                ),
+                "기존 대비 손실감소(m)": (
+                    round(float(diff), 3) if np.isfinite(diff) else np.nan
+                ),
+                "손실 감소율(%)": (
+                    round(float(pct), 1) if np.isfinite(pct) else np.nan
+                ),
+            }
 
-with st.expander(f"[계산 검증: 내경 {check_d:.3f} mm]"):
-    if check["Transition"]:
-        st.write("검증 결과: 전이영역으로 계산 제외")
-    else:
-        reference = run_case(check_d, method="colebrook")
-        actual = check["Total_Loss"]
-        expected = reference["Total_Loss"]
+        summary_rows = [make_summary_row("기존 배관", current, is_base=True)]
 
-        st.write(f"- 프로그램 총 손실수두: {actual:.6f} m")
-        st.write(f"- 기준계산 총 손실수두: {expected:.6f} m")
+        if custom_d_valid:
+            summary_rows.append(make_summary_row("사용자 지정 내경", custom_res))
 
-        if expected > 0:
-            error = abs(actual - expected) / abs(expected) * 100.0
-            st.write(f"- 기준계산 대비 상대차: {error:.4f}%")
+        if min_feasible is not None:
+            summary_rows.append(make_summary_row("최소 적합 내경", min_feasible))
+            summary_rows.append(make_summary_row("저손실 대안(큰 내경)", low_loss_alt))
+
+        if fitting_changed:
+            summary_rows.append(make_summary_row("기존관+Fitting변경", fitting_alt))
+
+        print("\n[주요 대안 비교표]")
+        display(pd.DataFrame(summary_rows))
+
+        columns = [
+            "D_mm", "Velocity", "Reynolds",
+            "Total_Loss", "Additional_Hp_m", "Feasible"
+        ]
+        table = (
+            feasible.head(5)
+            if not feasible.empty else scan_df.head(5)
+        )[columns].rename(columns={
+            "D_mm": "내경(mm)",
+            "Velocity": "유속(m/s)",
+            "Reynolds": "Re",
+            "Total_Loss": "총 손실수두(m)",
+            "Additional_Hp_m": "추가 펌프수두(m)",
+            "Feasible": "조건 충족"
+        })
+
+        print("\n[탐색 후보 요약: 최대 5개]")
+        display(table.round(3))
+
+        # ------------------------------------------
+        # 상대차 및 극한조건 검증
+        # ------------------------------------------
+        check_d = (
+            float(low_loss_alt["D_mm"])
+            if (replacement and low_loss_alt is not None)
+            else (
+                float(min_feasible["D_mm"])
+                if min_feasible is not None else current_d_mm
+            )
+        )
+
+        check = run(check_d)
+
+        print(f"\n[계산 검증: 내경 {check_d:.3f} mm]")
+
+        if check["Transition"]:
+            print("검증 결과: 전이영역으로 계산 제외")
         else:
-            st.write(f"- 기준계산 대비 절대차: {abs(actual - expected):.6f} m")
+            reference = run(check_d, method="colebrook")
 
-        if check["Reynolds"] > 4000:
-            st.write("- 비교 기준: Swamee–Jain 근사식 / Colebrook 반복계산 (계산법 간 비교, 실험값 비교 아님)")
-        else:
-            st.write("- 비교 기준: 층류 Darcy 마찰계수 64/Re")
+            actual = check["Total_Loss"]
+            expected = reference["Total_Loss"]
 
-        k_zero = run_case(check_d, kel=0.0, kval=0.0)
-        l_zero = run_case(check_d, length=0.0)
-        st.write(f"- K=0 검증 절대차: {abs(k_zero['Total_Loss'] - check['Major_Loss']):.3e} m")
-        st.write(f"- L=0 검증 절대차: {abs(l_zero['Total_Loss'] - check['Minor_Loss']):.3e} m")
+            print(f"프로그램 총 손실수두: {actual:.6f} m")
+            print(f"기준계산 총 손실수두: {expected:.6f} m")
+
+            if expected > 0:
+                error = (
+                    abs(actual - expected)
+                    / abs(expected) * 100.0
+                )
+                print(f"기준계산 대비 상대차: {error:.4f}%")
+            else:
+                print(
+                    f"기준계산 대비 절대차: "
+                    f"{abs(actual - expected):.6f} m"
+                )
+
+            if check["Reynolds"] > 4000:
+                print(
+                    "비교 기준: Swamee–Jain 근사식 / "
+                    "Colebrook 반복계산"
+                )
+                print("검증 구분: 계산법 간 비교, 실험값 비교 아님")
+            else:
+                print("비교 기준: 층류 Darcy 마찰계수 64/Re")
+
+            k_zero = run(check_d, kel=0.0, kval=0.0)
+            l_zero = run(check_d, length=0.0)
+
+            print(f"K=0 총 손실수두: {k_zero['Total_Loss']:.6f} m")
+            print(f"L=0 총 손실수두: {l_zero['Total_Loss']:.6f} m")
+            print(
+                "K=0 검증 절대차: "
+                f"{abs(k_zero['Total_Loss'] - check['Major_Loss']):.3e} m"
+            )
+            print(
+                "L=0 검증 절대차: "
+                f"{abs(l_zero['Total_Loss'] - check['Minor_Loss']):.3e} m"
+            )
+
+        print("=" * 68)
+
+        # ------------------------------------------
+        # 기존 vs 개선안 비교를 반영한 6분할 그래프
+        # ------------------------------------------
+        flow_max = max(20.0, 1.2 * q_input.value)
+        flows = np.linspace(0.0, flow_max, 41)
+
+        flow_curr_df = pd.DataFrame([
+            run(current_d_mm, q=q) for q in flows
+        ])
+
+        flow_low_df = (
+            pd.DataFrame([
+                run(float(low_loss_alt["D_mm"]), q=q) for q in flows
+            ])
+            if low_loss_alt is not None else None
+        )
+
+        flow_fit_df = (
+            pd.DataFrame([
+                run(
+                    current_d_mm, q=q,
+                    n_el=new_elbow_input.value,
+                    kel=new_kel_input.value,
+                    n_val=new_valve_input.value,
+                    kval=new_kval_input.value
+                )
+                for q in flows
+            ])
+            if fitting_changed else None
+        )
+
+        fig, axes = plt.subplots(2, 3, figsize=(17, 9))
+
+        # 1. 유량-총 손실수두
+        ax = axes[0, 0]
+        ax.plot(
+            flows, flow_curr_df["Total_Loss"],
+            "k-", linewidth=2,
+            label=f"Existing ({current_d_mm:.1f} mm)"
+        )
+        if flow_low_df is not None:
+            ax.plot(
+                flows, flow_low_df["Total_Loss"],
+                color="teal", linestyle="--", linewidth=2,
+                label=f"Low-loss ({low_loss_alt['D_mm']:.1f} mm)"
+            )
+        if flow_fit_df is not None:
+            ax.plot(
+                flows, flow_fit_df["Total_Loss"],
+                color="darkorange", linestyle="-.", linewidth=2,
+                label="Existing D + New Fitting"
+            )
+        ax.axvline(
+            q_input.value, color="gray", linestyle=":",
+            label=f"Target Q ({q_input.value:.1f})"
+        )
+        ax.set_title("Flow vs Total Head Loss (Before vs After)")
+        ax.set_xlabel("Flow rate (m³/h)")
+        ax.set_ylabel("Total head loss (m)")
+        ax.legend(fontsize=8)
+        ax.grid(True)
+
+        # 2. 유량-Reynolds 수
+        ax = axes[0, 1]
+        ax.plot(
+            flows, flow_curr_df["Reynolds"],
+            color="green", linewidth=2,
+            label=f"Existing ({current_d_mm:.1f} mm)"
+        )
+        if flow_low_df is not None:
+            ax.plot(
+                flows, flow_low_df["Reynolds"],
+                color="teal", linestyle="--", linewidth=2,
+                label=f"Low-loss ({low_loss_alt['D_mm']:.1f} mm)"
+            )
+        ax.axhspan(
+            2000, 4000,
+            color="orange", alpha=0.25,
+            label="Transition"
+        )
+        ax.axvline(
+            q_input.value, color="gray", linestyle=":",
+            label=f"Target Q ({q_input.value:.1f})"
+        )
+        ax.set_title("Flow vs Reynolds (Before vs After)")
+        ax.set_xlabel("Flow rate (m³/h)")
+        ax.set_ylabel("Reynolds number")
+        ax.legend(fontsize=8)
+        ax.grid(True)
+
+        # 3. 대안별 주손실 / 부손실 비교 막대그래프
+        ax = axes[0, 2]
+        bar_labels = ["Existing"]
+        major_vals = [
+            current["Major_Loss"]
+            if np.isfinite(current["Major_Loss"]) else 0.0
+        ]
+        minor_vals = [
+            current["Minor_Loss"]
+            if np.isfinite(current["Minor_Loss"]) else 0.0
+        ]
+
+        if custom_d_valid:
+            bar_labels.append(f"Custom\n({custom_res['D_mm']:.1f}mm)")
+            major_vals.append(
+                custom_res["Major_Loss"]
+                if np.isfinite(custom_res["Major_Loss"]) else 0.0
+            )
+            minor_vals.append(
+                custom_res["Minor_Loss"]
+                if np.isfinite(custom_res["Minor_Loss"]) else 0.0
+            )
+
+        if min_feasible is not None:
+            bar_labels.append(f"Min D\n({min_feasible['D_mm']:.1f}mm)")
+            major_vals.append(min_feasible["Major_Loss"])
+            minor_vals.append(min_feasible["Minor_Loss"])
+
+        if low_loss_alt is not None:
+            bar_labels.append(f"Low-loss\n({low_loss_alt['D_mm']:.1f}mm)")
+            major_vals.append(low_loss_alt["Major_Loss"])
+            minor_vals.append(low_loss_alt["Minor_Loss"])
+
+        if fitting_changed:
+            bar_labels.append("New\nFitting")
+            major_vals.append(
+                fitting_alt["Major_Loss"]
+                if np.isfinite(fitting_alt["Major_Loss"]) else 0.0
+            )
+            minor_vals.append(
+                fitting_alt["Minor_Loss"]
+                if np.isfinite(fitting_alt["Minor_Loss"]) else 0.0
+            )
+
+        x_pos = np.arange(len(bar_labels))
+        ax.bar(x_pos, major_vals, label="Major loss", color="steelblue")
+        ax.bar(
+            x_pos, minor_vals, bottom=major_vals,
+            label="Minor loss", color="coral"
+        )
+        for idx, (maj, mino) in enumerate(zip(major_vals, minor_vals)):
+            tot = maj + mino
+            ax.text(
+                idx, tot, f"{tot:.2f}m",
+                ha="center", va="bottom", fontsize=8
+            )
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(bar_labels, fontsize=8)
+        ax.set_title("Head Loss Breakdown by Case")
+        ax.set_ylabel("Head loss (m)")
+        ax.legend(fontsize=8)
+        ax.grid(True, axis="y")
+
+        # 4. 관경-유속
+        ax = axes[1, 0]
+        ax.plot(scan_df["D_mm"], scan_df["Velocity"], "b.-", label="Velocity")
+        ax.axhline(
+            vmax_input.value,
+            color="r", linestyle="--",
+            label="Velocity limit"
+        )
+        ax.axvline(
+            current_d_mm,
+            color="purple", linestyle="-.",
+            label="Existing D"
+        )
+        if custom_d_valid:
+            ax.axvline(
+                custom_d_input.value,
+                color="gold", linestyle="-",
+                label="Custom D"
+            )
+        if min_feasible is not None:
+            ax.axvline(
+                min_feasible["D_mm"],
+                color="green", linestyle=":",
+                label="Min feasible D"
+            )
+        if low_loss_alt is not None:
+            ax.axvline(
+                low_loss_alt["D_mm"],
+                color="teal", linestyle="--", alpha=0.8,
+                label="Low-loss D"
+            )
+        ax.set_title("Diameter vs Velocity")
+        ax.set_xlabel("Internal diameter (mm)")
+        ax.set_ylabel("Velocity (m/s)")
+        ax.legend(fontsize=8)
+        ax.grid(True)
+
+        # 5. 관경-총 손실수두 및 추가 펌프수두
+        ax = axes[1, 1]
+        ax.plot(
+            scan_df["D_mm"], scan_df["Total_Loss"],
+            "b-", label="Total loss (m)"
+        )
+        ax.plot(
+            scan_df["D_mm"], scan_df["Additional_Hp_m"],
+            "k.-", label="Add. pump head (m)"
+        )
+        ax.axhline(
+            hpmax_input.value,
+            color="r", linestyle="--",
+            label="Pump head limit"
+        )
+        ax.axvline(
+            current_d_mm,
+            color="purple", linestyle="-.",
+            label="Existing D"
+        )
+        if custom_d_valid:
+            ax.axvline(
+                custom_d_input.value,
+                color="gold", linestyle="-",
+                label="Custom D"
+            )
+        if min_feasible is not None:
+            ax.axvline(
+                min_feasible["D_mm"],
+                color="green", linestyle=":",
+                label="Min feasible D"
+            )
+        if low_loss_alt is not None:
+            ax.axvline(
+                low_loss_alt["D_mm"],
+                color="teal", linestyle="--", alpha=0.8,
+                label="Low-loss D"
+            )
+        ax.set_title("Diameter vs Total Loss & Pump Head")
+        ax.set_xlabel("Internal diameter (mm)")
+        ax.set_ylabel("Head (m)")
+        ax.legend(fontsize=8)
+        ax.grid(True)
+
+        # 6. 밸브 K-손실수두
+        k_values = np.linspace(
+            0.0,
+            max(10.0, 2.0 * max(kval_input.value, new_kval_input.value)),
+            25
+        )
+        k_curr = [run(current_d_mm, kval=k) for k in k_values]
+        ax = axes[1, 2]
+        ax.plot(
+            k_values,
+            [r["Total_Loss"] for r in k_curr],
+            "k-", label="Existing (Total loss)"
+        )
+        ax.plot(
+            k_values,
+            [r["Minor_Loss"] for r in k_curr],
+            "b--", label="Existing (Minor loss)"
+        )
+        if fitting_changed:
+            k_new = [
+                run(
+                    current_d_mm,
+                    n_el=new_elbow_input.value,
+                    kel=new_kel_input.value,
+                    n_val=new_valve_input.value,
+                    kval=k
+                )
+                for k in k_values
+            ]
+            ax.plot(
+                k_values,
+                [r["Total_Loss"] for r in k_new],
+                color="darkorange", linestyle="-.",
+                label="New Fitting (Total loss)"
+            )
+        ax.set_title("Valve K vs Loss (Before vs After)")
+        ax.set_xlabel("K per valve")
+        ax.set_ylabel("Head loss (m)")
+        ax.legend(fontsize=8)
+        ax.grid(True)
+
+        plt.tight_layout()
+        plt.show()
+        plt.close(fig)
 
 
 # ==========================================
-# 5. 그래프 출력 (st.pyplot)
+# 5. 이벤트 연결 및 초기 실행
 # ==========================================
-flow_max = max(20.0, 1.2 * q_val)
-flows = np.linspace(0.0, flow_max, 41)
-flow_df = pd.DataFrame([run_case(current_d_mm, q=q) for q in flows])
+def reset_defaults(btn=None):
+    for w in all_inputs:
+        w.unobserve(update_results, names="value")
 
-fig, axes = plt.subplots(2, 3, figsize=(17, 9))
+    q_input.value = DEFAULTS["q_m3h"]
+    p1_input.value = DEFAULTS["p1_kpa"]
+    p2_input.value = DEFAULTS["p2_kpa"]
+    dz_input.value = DEFAULTS["dz_m"]
+    rho_input.value = DEFAULTS["rho"]
+    mu_input.value = DEFAULTS["mu"]
+    length_input.value = DEFAULTS["length_m"]
+    od_input.value = DEFAULTS["od_mm"]
+    t_input.value = DEFAULTS["t_mm"]
+    eps_input.value = DEFAULTS["eps_mm"]
+    elbow_input.value = DEFAULTS["n_el"]
+    kel_input.value = DEFAULTS["k_el"]
+    valve_input.value = DEFAULTS["n_val"]
+    kval_input.value = DEFAULTS["k_val"]
+    mode_input.value = DEFAULTS["mode"]
+    dmin_input.value = DEFAULTS["dmin_mm"]
+    dmax_input.value = DEFAULTS["dmax_mm"]
+    custom_d_input.value = DEFAULTS["custom_d_mm"]
+    vmax_input.value = DEFAULTS["vmax_ms"]
+    hpmax_input.value = DEFAULTS["hpmax_m"]
+    new_elbow_input.value = DEFAULTS["new_n_el"]
+    new_kel_input.value = DEFAULTS["new_k_el"]
+    new_valve_input.value = DEFAULTS["new_n_val"]
+    new_kval_input.value = DEFAULTS["new_k_val"]
 
-# 1. 유량-손실수두
-ax = axes[0, 0]
-ax.plot(flows, flow_df["Total_Loss"], "k-", label="Total")
-ax.plot(flows, flow_df["Major_Loss"], "b--", label="Major")
-ax.plot(flows, flow_df["Minor_Loss"], "r:", label="Minor")
-ax.set_title("Existing Pipe: Flow vs Head Loss")
-ax.set_xlabel("Flow rate (m³/h)")
-ax.set_ylabel("Head loss (m)")
-ax.legend()
-ax.grid(True)
+    for w in all_inputs:
+        w.observe(update_results, names="value")
 
-# 2. 유량-Reynolds 수
-ax = axes[0, 1]
-ax.plot(flows, flow_df["Reynolds"], color="green")
-ax.axhspan(2000, 4000, color="orange", alpha=0.25, label="Transition")
-ax.set_title("Existing Pipe: Flow vs Reynolds")
-ax.set_xlabel("Flow rate (m³/h)")
-ax.set_ylabel("Reynolds number")
-ax.legend()
-ax.grid(True)
+    update_results()
 
-# 3. 손실 비율
-ax = axes[0, 2]
-if np.isfinite(current["Total_Loss"]) and current["Total_Loss"] > 0:
-    ax.pie(
-        [current["Major_Loss"], current["Minor_Loss"]],
-        labels=["Major", "Minor"],
-        autopct="%1.1f%%",
-        startangle=90
-    )
-else:
-    ax.text(0.5, 0.5, "No valid positive loss", ha="center", va="center", transform=ax.transAxes)
-ax.set_title("Existing Pipe: Loss Ratio")
 
-# 4. 관경-유속
-ax = axes[1, 0]
-ax.plot(candidates["D_mm"], candidates["Velocity"], "b.-")
-ax.axhline(vmax_val, color="r", linestyle="--", label="Velocity limit")
-ax.set_title("Diameter vs Velocity")
-ax.set_xlabel("Internal diameter (mm)")
-ax.set_ylabel("Velocity (m/s)")
-ax.legend()
-ax.grid(True)
+for w in all_inputs:
+    w.observe(update_results, names="value")
 
-# 5. 관경-추가 펌프수두
-ax = axes[1, 1]
-ax.plot(candidates["D_mm"], candidates["Additional_Hp_m"], "k.-")
-ax.axhline(hpmax_val, color="r", linestyle="--", label="Pump head limit")
-ax.set_title("Diameter vs Additional Pump Head")
-ax.set_xlabel("Internal diameter (mm)")
-ax.set_ylabel("Additional pump head (m)")
-ax.legend()
-ax.grid(True)
+reset_button.on_click(reset_defaults)
 
-if selected is not None:
-    for a in [axes[1, 0], axes[1, 1]]:
-        a.axvline(selected["D_mm"], color="green", linestyle=":")
-
-# 6. 밸브 K-손실수두
-k_values = np.linspace(0.0, max(10.0, 2.0 * kval_val), 25)
-k_results = [run_case(current_d_mm, kval=k) for k in k_values]
-
-ax = axes[1, 2]
-ax.plot(k_values, [r["Total_Loss"] for r in k_results], label="Total loss")
-ax.plot(k_values, [r["Minor_Loss"] for r in k_results], "--", label="Minor loss")
-ax.set_title("Existing Pipe: Valve K vs Loss")
-ax.set_xlabel("K per valve (valve count fixed)")
-ax.set_ylabel("Head loss (m)")
-ax.legend()
-ax.grid(True)
-
-plt.tight_layout()
-st.pyplot(fig)
-plt.close(fig)
+display(ui, out)
+update_results()
 
 # ==========================================
 # 6. 실제 배관 계통도 (P&ID 스타일 입상/직각 배관 구조)
